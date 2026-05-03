@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimeter Display</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        .widget {
+            width: 400px;
+            height: 100px;
+            background: #000;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden;
+        }
+        .status-indicator {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: red;
+            transition: background 0.3s;
+        }
+        .status-indicator.connected {
+            background: #0f0;
+        }
+        .mode {
+            color: #ffcc00;
+            font-size: 20px;
+            font-weight: bold;
+            margin-right: 15px;
+            min-width: 55px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            text-align: left;
+        }
+        .value-container {
+            flex: 1;
+            text-align: right;
+        }
+        .main-value {
+            color: #ffcc00;
+            font-size: 60px;
+            font-weight: bold;
+            line-height: 1;
+            font-family: 'Consolas', 'Courier New', monospace;
+            letter-spacing: 2px;
+        }
+        .unit {
+            font-size: 24px;
+            margin-left: 5px;
+            font-family: 'Arial', sans-serif;
+        }
+        .extra {
+            color: #ffcc00;
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="widget">
+        <div class="status-indicator" id="statusIndicator"></div>
+        <div class="mode" id="modeDisplay">---</div>
+        <div class="value-container">
+            <div class="main-value">
+                <span id="valueDisplay">--</span><span class="unit" id="unitDisplay"></span>
+            </div>
+            <div class="extra" id="extraDisplay"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/data';
+        const statusIndicator = document.getElementById('statusIndicator');
+        const modeDisplay = document.getElementById('modeDisplay');
+        const valueDisplay = document.getElementById('valueDisplay');
+        const unitDisplay = document.getElementById('unitDisplay');
+        const extraDisplay = document.getElementById('extraDisplay');
+
+        /**
+         * Форматирует число как 4-значное отображение (как на мультиметре).
+         * - Если OL: возвращает "OL" (с пробелом до 4 символов для выравнивания).
+         * - Иначе: пытается уместить в 4 значащих разряда с плавающей точкой.
+         */
+        function formatValue(value, isOL) {
+            if (isOL) {
+                // Выводим " OL" (три пробела + OL для правого выравнивания в моноширинном)
+                return " OL";
+            }
+            if (value === null || value === undefined || isNaN(value)) {
+                return "----";
+            }
+
+            let num = Number(value);
+            // Абсолютное значение для форматирования
+            let abs = Math.abs(num);
+            if (abs === 0) return "0.000";
+
+            // Если число >= 1000, покажем целое (может быть больше 4 цифр, но это редко)
+            if (abs >= 1000) {
+                return num.toFixed(0);
+            }
+            // Если >= 100, одна цифра после запятой (123.4)
+            if (abs >= 100) {
+                return num.toFixed(1);
+            }
+            // Если >= 10, две цифры после запятой (12.34)
+            if (abs >= 10) {
+                return num.toFixed(2);
+            }
+            // Если >= 1, три цифры (1.234)
+            if (abs >= 1) {
+                return num.toFixed(3);
+            }
+            // Меньше 1 — используем 4 значащих цифры через toPrecision
+            // Например, 0.1234 -> "0.1234", 0.01234 -> "0.01234" (всё равно 4 значащих, но может быть длиннее)
+            let precisionStr = num.toPrecision(4);
+            // Убираем лишние нули в конце, но оставляем хотя бы один ноль после точки, если число целое
+            if (precisionStr.includes('.')) {
+                precisionStr = precisionStr.replace(/\.?0+$/, '');
+                // если после удаления осталась точка в конце, убираем её (маловероятно)
+                if (precisionStr.endsWith('.')) precisionStr = precisionStr.slice(0, -1);
+            }
+            return precisionStr;
+        }
+
+        function updateUI(data) {
+            // Индикатор подключения
+            if (data.connected) {
+                statusIndicator.classList.add('connected');
+            } else {
+                statusIndicator.classList.remove('connected');
+            }
+
+            // Режим работы (функция)
+            modeDisplay.textContent = data.function || '---';
+
+            // Форматированное значение
+            const isOL = data.is_ol;
+            const rawValue = data.value;
+            const displayValue = formatValue(rawValue, isOL);
+            valueDisplay.textContent = displayValue;
+
+            // Единица измерения
+            unitDisplay.textContent = data.connected ? (data.unit || '') : '';
+
+            // Дополнительная информация
+            let extras = [];
+            if (data.is_hold) extras.push('HOLD');
+            if (data.is_rel) extras.push('REL');
+            if (!data.is_auto) extras.push('MAN');
+            if (data.is_dc) {
+                extras.push('DC');
+            } else if (data.connected && data.function && data.function.startsWith('A')) {
+                // Если функция начинается с A (ACV, ACmV, ACA...) — показываем AC
+                extras.push('AC');
+            }
+            if (data.battery > 0) extras.push(`🔋${data.battery}%`);
+            extraDisplay.textContent = extras.join(' ');
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                updateUI(data);
+            } catch (err) {
+                console.error('Ошибка опроса:', err);
+                updateUI({ connected: false });
+            }
+        }
+
+        // Опрашиваем каждые 200 мс
+        setInterval(fetchData, 200);
+        fetchData();
+    </script>
+</body>
+</html>
