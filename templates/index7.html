@@ -6,6 +6,13 @@
 <title>Multimeter Display</title>
 <style>
     @font-face {
+        font-family: 'DSEG7';
+        src: url('fonts/DSEG7Modern-BoldItalic.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+    }
+
+    @font-face {
         font-family: 'DirectiveFour';
         src: url('fonts/DirectiveFour.ttf') format('truetype');
         font-weight: normal;
@@ -58,7 +65,7 @@
         font-size: 60px;
         font-weight: bold;
         line-height: 1;
-        font-family: 'DirectiveFour', 'Courier New', monospace;
+        font-family: 'DSEG7', 'Courier New', monospace;
         letter-spacing: 2px;
     }
     #valueDisplay {
@@ -70,6 +77,7 @@
         font-size: 20px;
         width: 2ch;
         margin-left: 5px;
+        font-family: 'DirectiveFour', 'Courier New', monospace;
     }
 
     .extra {
@@ -152,7 +160,7 @@
     const holdCell = document.getElementById('holdCell');
 
     function formatValue(value, isOL) {
-        if (isOL) return "OL";
+        if (isOL) return "0L";
         if (value === null || value === undefined || isNaN(value)) return "----";
         let num = Number(value);
         let abs = Math.abs(num);

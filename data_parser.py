@@ -6,20 +6,16 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger("DataParser")
 
 FUNCTION_STRINGS = [
-    "ACV", "ACmV", "DCV", "DCmV", "Hz", "%", "OHM", "CONT", "DIDOE", "CAP",
-    "°C", "°F", "DCuA", "ACuA", "DCmA", "ACmA", "DCA", "ACA", "HFE", "Live",
-    "NCV", "LozV", "ACA", "DCA", "LPF", "AC/DC", "LPF", "AC+DC", "LPFA", "AC+DC2",
-    "INRUSH", ""
+    "AC V", "AC mV", "DC V", "DC mV", "Hz", "%", "RES", "CONT", "Diode", "CAP",
+    "°C", "°F", "DC μA", "AC μA", "DC mA", "AC mA", "DC A", "AC A", "NCV"
 ]
 
 DEFAULT_UNITS = {
-    "ACV": "V", "ACmV": "mV", "DCV": "V", "DCmV": "mV",
-    "Hz": "Hz", "%": "%", "OHM": "Ω", "CONT": "Ω", "DIDOE": "V",
+    "AC V": "V", "AC mV": "mV", "DC V": "V", "DC mV": "mV",
+    "Hz": "Hz", "%": "%", "RES": "Ω", "CONT": "Ω", "Diode": "V",
     "CAP": "F", "°C": "°C", "°F": "°F",
-    "DCuA": "μA", "ACuA": "μA", "DCmA": "mA", "ACmA": "mA",
-    "DCA": "A", "ACA": "A", "HFE": "", "Live": "", "NCV": "",
-    "LozV": "V", "LPF": "", "AC/DC": "", "LPF": "", "AC+DC": "",
-    "LPFA": "", "AC+DC2": "", "INRUSH": "", "": ""
+    "DC μA": "μA", "AC μA": "μA", "DC mA": "mA", "AC mA": "mA",
+    "DC A": "A", "AC A": "A", "NCV": ""
 }
 
 class ParsedData:
@@ -76,8 +72,8 @@ class DataParser:
                         # Очищаем единицы от возможных некорректных символов
                         unit = arr[1]
                         unit = unit.replace("©", "Ω").replace("&#169;", "Ω")
-                        # Замена uF на μF при необходимости
-                        unit = unit.replace("uF", "μF")  # если хотите отображать "μF"
+                        # Замена u на μ 
+                        unit = unit.replace("u", "μ")  # если хотите отображать "μ"
                         func_map[ridx] = {
                             "range_str": arr[0],
                             "unit": unit,
@@ -208,12 +204,21 @@ class DataParser:
 
     @staticmethod
     def _detect_ol(raw_str: str) -> tuple:
-        clean = raw_str.strip().replace(" ", "").upper()
+        # Убираем пробелы, точки и любые другие разделители,
+        # оставляем только буквы и возможный знак минуса
+        clean = raw_str.strip()
+        # Удаляем всё, кроме букв и минуса
+        clean = ''.join(ch for ch in clean if ch.isalpha() or ch == '-')
+        clean = clean.upper()
+        
         if not clean:
             return False, False
+        
         has_minus = clean.startswith("-")
         if has_minus:
             clean = clean[1:]
+        
+        # Теперь строка содержит только буквы, например "OL"
         if "OL" in clean:
             return True, has_minus
         return False, False

@@ -1,16 +1,25 @@
 import pathlib
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles  # <-- новый импорт
 from typing import Optional
 
 TEMPLATES_DIR = pathlib.Path(__file__).parent / "templates"
 INDEX_PATH = TEMPLATES_DIR / "index.html"
+FONTS_DIR = TEMPLATES_DIR  / "fonts"
+INDEX7_PATH = TEMPLATES_DIR / "index7.html"
 
 try:
     with open(INDEX_PATH, "r", encoding="utf-8") as f:
         HTML_CONTENT = f.read()
 except FileNotFoundError:
     HTML_CONTENT = "<html><body><h1>Error: index.html not found</h1></body></html>"
+
+try:
+    with open(INDEX7_PATH, "r", encoding="utf-8") as f:
+        HTML_CONTENT7 = f.read()
+except FileNotFoundError:
+    HTML_CONTENT7 = "<html><body><h1>Error: index7.html not found</h1></body></html>"
 
 app = FastAPI(title="Multimeter BLE Server")
 
@@ -61,3 +70,10 @@ async def get_data():
 @app.get("/")
 async def root():
     return HTMLResponse(content=HTML_CONTENT)
+
+@app.get("/7seg")
+async def root7():
+    return HTMLResponse(content=HTML_CONTENT7)
+
+# Монтируем папку fonts, чтобы все файлы из неё раздавались по /fonts/...
+app.mount("/fonts", StaticFiles(directory=str(FONTS_DIR)), name="fonts")

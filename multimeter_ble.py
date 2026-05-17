@@ -79,26 +79,33 @@ async def run_web_server(port: int):
     except Exception as e:
         logger.error(f"Критическая ошибка веб-сервера: {e}", exc_info=True) if logger else None
 
-async def main_async(config: Config):
+async def main_async(config: Config, shutdown_event: asyncio.Event = None):
     global web_server_task
-    logger.info("Запуск main_async") if logger else None
+    logger.info("Запуск main_async")
     web_server_task = asyncio.create_task(run_web_server(config.web_port))
-
     ble_task = asyncio.create_task(run_ble_connection(config))
 
-    try:
-        await asyncio.wait([web_server_task, ble_task], return_when=asyncio.FIRST_COMPLETED)
-    except asyncio.CancelledError:
-        pass
-    finally:
-        for task in [web_server_task, ble_task]:
-            if not task.done():
-                task.cancel()
+    if shutdown_event:
+        await shutdown_event.wait()
+        for t in [web_server_task, ble_task]:
+            if not t.done():
+                t.cancel()
                 try:
-                    await task
+                    await t
                 except asyncio.CancelledError:
                     pass
-    logger.info("main_async завершён") if logger else None
+    else:
+        try:
+            await web_server_task
+        except asyncio.CancelledError:
+            pass
+        if not ble_task.done():
+            ble_task.cancel()
+            try:
+                await ble_task
+            except asyncio.CancelledError:
+                pass
+    logger.info("main_async завершён")
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -175,7 +182,6 @@ def main():
 
     # Настройка логгера
     if args.debug:
-        # Подробное логирование в файл
         logging.basicConfig(
             level=logging.DEBUG,
             format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
@@ -184,10 +190,12 @@ def main():
         logger = logging.getLogger("Main")
         logger.debug("Режим отладки включен")
     else:
-        # Полностью отключаем логирование (только критические ошибки)
+        # Логгер создаётся, но ничего не выводит
         logging.basicConfig(level=logging.CRITICAL, handlers=[logging.NullHandler()])
-        logger = None  # все вызовы logger будут проверены, если logger is None
-
+        logger = logging.getLogger("Main")
+        # Устанавливаем уровень выше, чтобы info/debug не выводились
+        logger.setLevel(logging.CRITICAL)
+        
     if args.port:
         config.web_port = args.port
         config.save()
@@ -206,9 +214,11 @@ def main():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        # Создаём событие для сигнала завершения
+        shutdown_event = asyncio.Event()
         def start_asyncio():
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(main_async(config))
+            loop.run_until_complete(main_async(config, shutdown_event))
 
         thread = threading.Thread(target=start_asyncio, daemon=False)
         thread.start()
@@ -216,11 +226,17 @@ def main():
         def on_exit():
             if logger:
                 logger.info("Запрошен выход из трея")
-            loop.call_soon_threadsafe(loop.stop)
+            # Сигнализируем asyncio о завершении
+            loop.call_soon_threadsafe(shutdown_event.set)
+            # Останавливаем цикл, если он ещё не остановлен
+            if loop.is_running():
+                loop.call_soon_threadsafe(loop.stop)
 
         tray_app = TrayApp(None, None, on_exit)
         tray_app.run()
+        # После выхода из tray_app.run() ждём завершения потока
         thread.join(timeout=3)
+
         if logger:
             logger.info("Программа завершена")
         return
